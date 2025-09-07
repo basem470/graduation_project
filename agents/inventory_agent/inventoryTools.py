@@ -67,10 +67,54 @@ def inventory_sql_read(input_str: str) -> str:
             if not product_id or not product_id.isdigit():
                 return "Provide integer 'product_id'."
             cur.execute("""
-                        SELECT p.id as product_id, p.sku, p.name, s.qty_on_hand, s.reorder_point, p.price, p,description
+                        SELECT p.id as product_id, p.sku, p.name, s.qty_on_hand, s.reorder_point, p.price, p.description
                         FROM products p
                         JOIN stock s ON p.id = s.product_id
-                        WHERE p.id=?
+                        WHERE p.id = ?
                         """, (int(product_id),))
             return json.dumps(_rows_to_dicts(cur.fetchall()), indent=2) or "No results."
+        
+        if read_intent == InvReadIntent.GET_STOCK_BY_SKU:
+            sku = parse_value(input_str, "sku")
+            if not sku:
+                return "Provide 'sku'."
+            cur.execute("""
+                        SELECT p.id as product_id, p.sku, p.name, s.qty_on_hand, s.reorder_point, p.price, p.description
+                        FROM products p
+                        JOIN stock s ON p.id = s.product_id
+                        WHERE p.sku = ?
+                        """, (sku,))
+            return json.dumps(_rows_to_dicts(cur.fetchall()), indent=2) or "No results."
+        
+        if read_intent == InvReadIntent.GET_STOCK_BY_NAME:
+            name = parse_value(input_str, "name")
+            if not name:
+                return "Provide 'name'."
+            cur.execute("""
+                        SELECT p.id as product_id, p.sku, p.name, s.qty_on_hand, s.reorder_point, p.price, p.description
+                        FROM products p
+                        JOIN stock s ON p.id = s.product_id
+                        WHERE p.name LIKE ?
+                        """, (f"%{name}%",))
+            return json.dumps(_rows_to_dicts(cur.fetchall()), indent=2) or "No results."
+        
+        if read_intent == InvReadIntent.LIST_UNDER_REORDER:
+            cur.execute("""
+                        SELECT p.id as product_id, p.sku, p.name, s.qty_on_hand, s.reorder_point
+                        FROM products p
+                        JOIN stock s ON p.id = s.product_id
+                        WHERE s.qty_on_hand < s.reorder_point
+                        ORDER BY (s.reorder_point - s.qty_on_hand) DESC
+                        """)
+            return json.dumps(_rows_to_dicts(cur.fetchall()), indent=2) or "No items under reorder."
+        
+        if read_intent == InvReadIntent.LIST_PRODUCTS:
+            cur.execute("SELECT id, sku, name, price, description FROM products ORDER BY id")
+            return json.dumps(_rows_to_dicts(cur.fetchall()), indent=2)
+        
+        if read_intent == InvReadIntent.LIST_SUPPLIERS:
+            cur.execute("SELECT id, name, email, phone FROM suppliers ORDER BY id")
+            return json.dumps(_rows_to_dicts(cur.fetchall()), indent=2)
+        
+
         
