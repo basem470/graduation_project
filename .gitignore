@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyCharm / VSCode
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment variables
+.env
+
+# Data / output (optional, adjust if you want to track some datasets)
+data/
+output/
+
+# Backup files
+*.bak
+*.swp
+*.tmp
+
+# Ignore compiled extensions
+*.so
+*.pyd
