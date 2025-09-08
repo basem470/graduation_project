@@ -49,7 +49,8 @@ questions = [
     # "Get all orders created on '2024-09-01'",
     # "List orders created between '2024-08-15' and '2024-09-15'",
 
-    "show me the orders of Sara Mostafa Inc"
+    # "show me the orders of Sara Mostafa Inc"
+    # ""
 
 ]
 

@@ -33,7 +33,19 @@ API_BASE_URL = "http://localhost:8000"
 # =========================
 # CUSTOMER TOOLS
 # =========================
+@tool
+def find_recent_customers_tool() -> str:
+    """
+    Get all customers from the database ordered by the most recent.
 
+    Returns:
+        A list of customer information or an error message.
+    """
+    try:
+        answer = sql_query_executor("SELECT * FROM customers order by created_at desc limit 10")
+        return answer
+    except Exception as e:
+        return f"Error getting customers: {e}"
 
 @tool
 def find_customer_by_id_tool(customer_id: Union[int, str]) -> str:
@@ -209,7 +221,19 @@ def find_customers_by_date_created(input: str) -> str:
 # =========================
 # ORDERS TOOLS
 # =========================
+@tool
+def find_recent_orders():
+    """
+    Get all orders from the database ordered by the most recent.
 
+    Returns:
+        A list of order information or an error message.
+    """
+    try:
+        answer = sql_query_executor("SELECT  o.id as order_id, name as customer_name, o.total, o.status, o.created_at as order_date FROM orders o join customers c on o.customer_id=c.id order by o.created_at desc limit 10")
+        return answer
+    except Exception as e:
+        return f"Error getting orders: {e}"
 
 @tool
 def find_order_by_order_id(order_id: str) -> str:
@@ -320,7 +344,7 @@ def find_leads_by_name(name: str) -> str:
     if not isinstance(name, str) or not name:
         return "Error: name must be a non-empty string."
     
-    sql_query = f"SELECT * FROM leads WHERE name = '{name}'"
+    sql_query = f"SELECT * FROM leads WHERE name LIKE '%{name}%'"
     
     try:
         answer = sql_query_executor(sql_query)
@@ -336,6 +360,7 @@ def find_leads_by_name(name: str) -> str:
 
 tools = [
     # Customers_read
+    find_recent_customers_tool,
     find_customer_by_id_tool,
     find_customer_by_name_tool,
     find_customer_by_email_tool,
@@ -345,5 +370,6 @@ tools = [
     # Orders_read
     find_order_by_order_id,
     find_order_by_customer_id,
-    find_orders_by_date
+    find_orders_by_date,
+    
      ]
