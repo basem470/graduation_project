@@ -19,7 +19,3 @@ def parse_value(input_str: str, value_key: str) -> Optional[str]:
     return None
 
 
-# Example
-input_str = "Action Input: 'intent: get_customer_by_name, value: Ahmed'"
-parsed_value = parse_value(input_str, "value")
-print(parsed_value)  # Output: Ahmed
