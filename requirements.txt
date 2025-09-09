@@ -3,3 +3,5 @@ pydantic
 langchain_google_genai
 langchain_community
 fastapi
+langchain-chroma
+pandas
