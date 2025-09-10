@@ -370,7 +370,7 @@ Result: {result if result else 'Operation completed successfully'}
 class SalesReactAgent:
     """Main sales ReAct agent class with write preview capabilities."""
     
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, model_name: str = "gpt-4o"):
         self.config = DatabaseConfig.from_env()
         self.schema_manager = DatabaseSchemaManager(self.config)
         self.schema = self.schema_manager.get_schema()

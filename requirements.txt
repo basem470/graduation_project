@@ -5,5 +5,8 @@ langchain_community
 fastapi
 langchain-chroma
 pandas
+<<<<<<< HEAD
 scikit-learn
 langgraph
+=======
+>>>>>>> bf7282e5efe39dd9ba53a0cc9c7389ade88b51eb
