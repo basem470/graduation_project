@@ -13,11 +13,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-PROJECT_ROOT = r"d:\ERP_Agent_Repo\graduation_project"
-DOCS_DIR = os.path.join(PROJECT_ROOT, "data", "docs")
-PERSIST_DIR = os.path.join(PROJECT_ROOT, "data", "chroma_db")
 
-print(f"📁 Project Root: {PROJECT_ROOT}")
+DOCS_DIR = "data/docs/policies"
+PERSIST_DIR = "data/refund_policy_chroma"
+
 print(f"📁 Docs Dir: {DOCS_DIR}")
 print(f"📁 Vector Store: {PERSIST_DIR}")
 
@@ -110,7 +109,7 @@ class RAGT:
     
     def load_glossary_from_db(self):
         """Load glossary terms from SQLite database"""
-        conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "data", "erp.db"))
+        conn = sqlite3.connect(os.path.join( "data", "erp.db"))
         cursor = conn.cursor()
         
         documents = []
@@ -337,3 +336,6 @@ def smart_rag_search(query: str, agent_type: str = "general") -> str:
 # Helper function for finance agent  
 def finance_rag(query: str) -> str:
     return smart_rag_search(query, "finance")
+
+if __name__ == "__main__":
+    finance_rag("What is the refund policy?")

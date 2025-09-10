@@ -1,6 +1,7 @@
 import streamlit as st
 import datetime
 import json
+#import router here
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -70,7 +71,7 @@ if "session_counter" not in st.session_state:
     st.session_state.session_counter = 0
 
 # --- Response Function (easily modifiable) ---
-def get_assistant_response(user_message):
+def get_assistant_response(user_message): 
     """
     Simple echo response - MODIFY THIS FUNCTION to integrate with your backend/LangChain
     
@@ -81,7 +82,7 @@ def get_assistant_response(user_message):
         str: The assistant's response
     """
     # Simple echo response - replace this with your actual logic
-    return f"Echo: {user_message}"
+    return f"Echo: {user_message}" <- #rutern router.invoke use messages
 
 # --- Chat History Management ---
 def create_new_session():
