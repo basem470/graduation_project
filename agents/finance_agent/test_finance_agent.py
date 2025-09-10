@@ -14,9 +14,9 @@ def run(query: str):
         print(f"❌ Error: {e}")
 
 queries = [
+    "What is the refund policy?",
     "Is invoice INV-1001 suspicious?",
     "Are there any pending approvals?",
-    "What is the refund policy?",
     "Get status of invoice INV-000174",
     "Flag invoice INV-1001 as suspicious due to duplicate billing"
 ]

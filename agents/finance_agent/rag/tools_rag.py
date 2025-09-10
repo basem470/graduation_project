@@ -107,7 +107,7 @@ class RAGT:
     
     def load_glossary_from_db(self):
         """Load glossary terms from SQLite database"""
-        conn = sqlite3.connect(os.path.join( "data", "erp.db"))
+        conn = sqlite3.connect(os.path.join("db", "erp.db"))
         cursor = conn.cursor()
         
         documents = []
