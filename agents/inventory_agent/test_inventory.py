@@ -1,5 +1,5 @@
 # test_inventory_fixed.py
-from agents_inventory_agent import inventory_agent_fixed
+from agents_inventory_agent import inventory_agent, handle_inventory_query
 
 # More realistic test queries
 test_queries = [
