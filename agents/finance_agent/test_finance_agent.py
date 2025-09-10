@@ -25,3 +25,4 @@ print("🚀 Testing Finance Agent...\n")
 
 for q in queries:
     run(q)
+    
