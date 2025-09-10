@@ -82,7 +82,7 @@ def get_assistant_response(user_message):
         str: The assistant's response
     """
     # Simple echo response - replace this with your actual logic
-    return f"Echo: {user_message}" <- #rutern router.invoke use messages
+    return f"Echo: {user_message}" #rutern router.invoke use messages
 
 # --- Chat History Management ---
 def create_new_session():
