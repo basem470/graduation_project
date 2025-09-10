@@ -1,4 +1,3 @@
-# llm_manager.py
 from typing import Union
 import os
 import dotenv
@@ -41,6 +40,7 @@ def initialize_llm(model_name: str) -> Union[OllamaLLM, ChatGoogleGenerativeAI, 
 
     else:
         if model_name.startswith("gpt-"):
+            dotenv.load_dotenv()
             api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
                 raise ValueError("OPENAI_API_KEY is required")
