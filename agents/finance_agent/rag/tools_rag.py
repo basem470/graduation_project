@@ -57,7 +57,7 @@ class RAGT:
         
         # Define the specific files you want to process
         target_files = [
-            r"D:\ERP_Agent_Repo\graduation_project\data\docs\policies\refund_policy.pdf"
+            r"data/docs/policies/refund_policy.pdf"
         ]
         
         for file_path in target_files:
