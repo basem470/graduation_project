@@ -59,7 +59,6 @@ def initialize_llm(model_name: str) -> Union[OllamaLLM, ChatGoogleGenerativeAI, 
     return llm
 
 
-# ✅ Singleton instance (only built once)
 _llm_instance = None
 
 def build_llm(model_name: str = "phi3:mini"):
