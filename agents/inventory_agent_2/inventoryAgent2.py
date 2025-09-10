@@ -537,3 +537,128 @@ class InventoryAgent:
             func=usage_forcast,
             decsription="Input optional number of days (default 30). Returns average daily usage & 7-day forecast per product (JSON)"
         )
+    
+    def _tool_reorder_planner(self) -> Tool:
+        def plan(params_json: str) -> str:
+            """
+            Input: JSON (optional): 
+            {
+                "lead_time_days": 7,
+                "safety_days": 3,
+                "moq": 10
+            }
+            For each product, recommends qty = max(avg_daily * (lead + dafety) - qty_on_hand, 0) rounded up to MOQ.
+            """
+            try: 
+                params = json.loads(params_json) if params_json.strip() else {}
+            except:
+                params = {}
+            lead = int(params.get("lead_time_days", self.inv_config.default_lead_time_days))
+            safety = int(params.get("safety_days", self.inv_config.default_safety_days))
+            moq =  int(params.get("moq", self.inv_config.default_moq))
+
+            # 1. Usage (Last N days)
+            wnd = self.inv_config.usage_window_days
+            since_dt = (datetime.now() - timedelta(days=wnd)).strftime("%Y-%m-%d %H:%M:%S")
+            usage_q = f"""
+            WITH usage AS (
+                SELECT p.id AS product_id, SUM(CASE WHEN sm.change_qty < 0 THEN -sm.change_qty ELSE 0 END) AS total_out
+                FROM products p
+                LEFT JOIN stock_movements sm ON sm.product_id = p.id AND sm.created_at >= '{since_dt}'
+                GROUP BY p.id
+            )
+            SELECT p.id AS product_id, p.sku, p.name, IFNULL(u.total_out, 0) AS total_out, s.qty_on_hand, s.reorder_point
+            FROM products p
+            JOIN stock s ON s.product_id = p.id
+            LEFT JOIN usage u ON u.product_id = p.id
+            """
+            rows = self._run_sql_fetchall(usage_q)
+
+            suggestions = []
+            for r in rows:
+                total_out = r["total_out"] or 0
+                avg_daily = total_out / max(wnd, 1)
+                target = avg_daily * (lead + safety) # Demand to cover
+                need = max(target - (r["qty_on_hand"] or 0), 0.0)
+                # Round up to MOQ
+                rec_qty = 0 if need <= 0 else int(math.ceil(need / moq) * moq)
+                suggestions.append({
+                    "product_id": r["product_id"],
+                    "sku": r["sku"],
+                    "name": r["name"],
+                    "avg_daily_usage": round(avg_daily, 3), 
+                    "recommended_qty": rec_qty
+                })
+
+            # Filter zero recommendations for clarity
+            suggestions = [x for x in suggestions if x["recommended_qty"] > 0]
+            return json.dumps(suggestions, indent=2)
+        return Tool(
+            name="reorder_planner_tool",
+            func=plan,
+            description="Inoput JSON with lead_time_days/safety_days/moq; returns JSON list of recommendeed_qty per product."
+        )
+    
+    def _tool_propose_po(self) -> Tool:
+        def propose(po_json: str) -> str:
+            """
+            Input: JSON: 
+            {
+                "supplier_id": 1,
+                "items": [{"product_id": 1, "quantity": 50, "unit_cost": 9.5}, ...]
+            }
+            PREVIEW ONLY: creates a confirmation token; once confirmed, it will INSERT a row into approvals
+            with payload_json describing the PO proposal (status="pending").
+            """
+            try: 
+                payload = json.loads(po_json)
+                supplier_id = int(payload["supplier_id"])
+                items = payload["items"]
+            except Exception as e:
+                return f"Invalid JSON: {e}"
+            
+            # Human-readable preview
+            affected = "Proposed PO -> approvals.pending\n" + json.dumps(payload, indent=2)
+            token = self.confirmation_manager.add_pending_write(
+                sql_query="", # not used here; we will execute Python code on confirm
+                operation_type="PROPOSE_PO", 
+                affected_data=affected, 
+                row_count=len(items)
+            )
+            return (
+                f"📋 WRITE OPERATION PREVIEW\nOperation: PROPOSE_PO\n"
+                f"Rows affected (items): {len(items)}\n"
+                f"{affected}\n\n"
+                f"CONFIRMATION REQUIRED: token {token}"
+            )
+        return Tool(
+            name="propose_po_tool", 
+            func=propose, 
+            description="Preview a new PO proposal (insert a pending row into approvals on confirm)."
+        )
+    
+    def _tool_commit_po_from_approval(self) -> Tool:
+        def commit(input_str: str) -> str:
+            """
+            Two modes:
+            1) 'preview approval_id=123' -> shows what will be written, returns a token.
+            2) 'confirm token=ABCDEFGH decided_by=alice' -> execute sthe trannsaction:
+                - INSERT into purchase_orders + po_items
+                - UPDATE approvals.status='approved', decided_by, decided_at
+            """
+            s = input_str.strip()
+            if s.lower().startswith("preview"):
+                # parse approval_id
+                try:
+                    approval_id = int(s.split("approval_id=")[1])
+                except:
+                    return "Usage: preview approval_id=123"
+            
+                row = self._fetchone("SELECT id, payload_json FROM approvals WHERE id=? AND status='pending'", (approval_id,))
+                if not row:
+                    return f"No pending approval with id={approval_id}"
+                payload = json.loads(row["payload_json"])
+                supplier_id = int(payload["supplier_id"])
+                items = payload["items"]
+
+                
