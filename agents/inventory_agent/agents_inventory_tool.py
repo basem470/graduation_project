@@ -128,55 +128,103 @@ def receive_po(po_id: int, product_sku: str, received_qty: int) -> str:
     except Exception as e:
         return f"❌ Failed to receive PO: {e}"
 # --- Tool 4: Document RAG Search ---
+# --- Tool 4: Document RAG Search (FIXED) ---
 @tool
 def doc_rag_tool(query: str) -> str:
     """Searches supplier contracts and policies."""
     try:
-        from langchain.embeddings import OpenAIEmbeddings
-        from langchain.vectorstores import Chroma
-        from langchain.chains import RetrievalQA
-        from langchain.llms import OpenAI
-        from langchain.document_loaders import PyPDFLoader, TextLoader
+        # Import correct modules
+        from langchain_chroma import Chroma
+        from langchain_core.documents import Document
         from langchain.text_splitter import RecursiveCharacterTextSplitter
+        from langchain_openai import OpenAIEmbeddings
+        
+        # Load environment variables
+        load_dotenv()
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return "❌ OPENAI_API_KEY not found in .env file"
 
         # Paths
         DOCS_DIR = os.path.abspath(r"data/docs/contracts")
-        PERSIST_DIR = os.path.abspath(r"data/inventory_chroma")
+        PERSIST_DIR = os.path.abspath(r"data/chroma_db_inventory")
 
-        # Load or create vector store
-        if os.path.exists(PERSIST_DIR) and os.listdir(PERSIST_DIR):
-            vectordb = Chroma(persist_directory=PERSIST_DIR, embedding_function=OpenAIEmbeddings())
+        # Initialize embeddings
+        embedding_model = OpenAIEmbeddings(api_key=api_key)
+
+        # Check if vector store already exists
+        if os.path.exists(PERSIST_DIR) and any(os.scandir(PERSIST_DIR)):
+            print("✅ Loading existing inventory vector store...")
+            retriever = Chroma(
+                persist_directory=PERSIST_DIR,
+                embedding_function=embedding_model
+            ).as_retriever(search_kwargs={"k": 3})
         else:
+            print("🔄 Creating new vector store for inventory docs...")
+
+            # Create list of documents
             documents = []
+            if not os.path.exists(DOCS_DIR):
+                return f"❌ Documents directory not found: {DOCS_DIR}"
+
             for filename in os.listdir(DOCS_DIR):
-                if filename.endswith(".pdf"):
-                    loader = PyPDFLoader(os.path.join(DOCS_DIR, filename))
-                elif filename.endswith(".txt"):
-                    loader = TextLoader(os.path.join(DOCS_DIR, filename))
-                else:
+                filepath = os.path.join(DOCS_DIR, filename)
+                if not os.path.isfile(filepath):
                     continue
-                documents.extend(loader.load())
+                try:
+                    if filename.endswith(".pdf"):
+                        from langchain_community.document_loaders import PyPDFLoader
+                        loader = PyPDFLoader(filepath)
+                        docs = loader.load()
+                    elif filename.endswith(".txt") or filename.endswith(".md"):
+                        from langchain_community.document_loaders import TextLoader
+                        loader = TextLoader(filepath, encoding='utf-8')
+                        docs = loader.load()
+                    else:
+                        continue
 
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-            docs = text_splitter.split_documents(documents)
+                    # Add metadata
+                    for doc in docs:
+                        doc.metadata.update({
+                            "source": filename,
+                            "category": "contract",
+                            "agent": "inventory"
+                        })
+                    documents.extend(docs)
+                except Exception as e:
+                    print(f"⚠️ Failed to load {filename}: {e}")
 
-            embeddings = OpenAIEmbeddings()
-            vectordb = Chroma.from_documents(docs, embeddings, persist_directory=PERSIST_DIR)
-            vectordb.persist()
+            if not documents:
+                return "No valid documents found in contracts folder."
 
-        retriever = vectordb.as_retriever(search_type="similarity", search_kwargs={"k": 3})
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=OpenAI(temperature=0),
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=False
-        )
+            # Split and embed
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+            split_docs = text_splitter.split_documents(documents)
 
-        response = qa_chain.run(query)
-        return response
+            # Create vector store
+            vectordb = Chroma.from_documents(
+                documents=split_docs,
+                embedding=embedding_model,
+                persist_directory=PERSIST_DIR
+            )
+            retriever = vectordb.as_retriever(search_kwargs={"k": 3})
+
+        # Perform retrieval
+        results = retriever.invoke(query)
+        if not results:
+            return "No relevant policy or contract found."
+
+        # Format response
+        context = "\n\n".join([
+            f"📄 [{r.metadata.get('source', 'unknown')}]\n{r.page_content}"
+            for r in results
+        ])
+        return f"Found {len(results)} relevant document(s):\n\n{context}"
+
+    except ImportError as e:
+        return f"❌ Missing package: {e.name}. Run: pip install {e.name}"
     except Exception as e:
-        return f"❌ RAG Tool Error: {e}"
-
+        return f"❌ RAG Tool Error: {str(e)}"
 
 # --- Tool 5: Get Product Stock Level ---
 @tool

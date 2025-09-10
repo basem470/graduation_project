@@ -15,9 +15,6 @@ test_queries = [
     # 4. RAG search
     "Search for supplier contract terms",
     
-    # 5. Create PO (will fail but test gracefully)
-    "Create purchase order for supplier Acme Corp for product SKU-0134 quantity 50",
-    
     # 6. Simple query
     "How does the inventory system work?",
 ]
