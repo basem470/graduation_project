@@ -16,7 +16,7 @@ if not api_key:
 
 # --- Setup DB ---
 # ✅ Use correct path based on your system
-DB_PATH = r"D:\Sprints.ai-Assingment Group - Final Project\data\erp.db"
+DB_PATH = r"db/erp.db"
 if not os.path.exists(DB_PATH):
     raise FileNotFoundError(f"❌ Database not found at: {DB_PATH}")
 
@@ -31,16 +31,12 @@ vectorstore = Chroma(
 )
 retriever = vectorstore.as_retriever()
 
+from tool_rag import rag_search_tool, finance_rag
+
 @tool
 def policy_rag_tool(query: str) -> str:
     """Searches finance policy documents for rules."""
-    try:
-        results = retriever.invoke(query)  # ✅ Use invoke() instead of deprecated get_relevant_documents
-        if not results:
-            return "No policy found."
-        return "\n\n".join([r.page_content for r in results])
-    except Exception as e:
-        return f"Error in RAG search: {str(e)}"
+    return finance_rag(query)
 
 @tool
 def finance_sql_read(query: str) -> str:
