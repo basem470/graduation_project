@@ -3,6 +3,7 @@ import os
 import json
 import math
 import sqlite3
+import logging
 import hashlib
 import time
 import re
@@ -14,6 +15,10 @@ from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferMemory
 from langchain_community.utilities import SQLDatabase
 from lib.build_llm import build_llm
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @dataclass
 class DatabaseConfig:
@@ -374,7 +379,7 @@ class InventorySQL:
         Returns: new purchase_orders.id
         """
 
-        conn = sqlite.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path)
         try: 
             cur = conn.cursor()
             cur.execute(
@@ -453,4 +458,82 @@ class InventoryAgent:
             handle_parsing_errors=True, 
             max_iterations=10, 
             early_stopping_method="generate"
+        )
+
+    # ============ generic SQL tools ============
+    def _create_read_sql_tool(self) -> Tool:
+        desc = f"""
+        Read-only SELECT over inventory tables.
+        Allowed tables: {', '.join(self.config.allowed_tables)}
+        Schema: 
+        {self.schema}
+        """
+        return Tool(name="Inventory_SQL_Read", func=self.sql_tool_execute_read_query, description=desc)
+    
+    def _create_write_preview_tool(self) -> Tool:
+        desc = "Preview any INSERT/UPDATE/DELETE first; returns a token to confirm later."
+        return Tool(name="Preview_Write_Operation", func=self.sql_tool.preview_write_query, description=desc)
+    
+    def _create_execute_confirmed_write_tool(self) -> Tool:
+        desc = "Execute a previously previewed write using the token."
+        return Tool(name="Execute_Confirmed_Write", func=self.sql_tool.execute_confirmed_write, description=desc)
+    
+    # ============ inventory domain tools ============
+    def _tool_low_stock_report(self) -> Tool:
+        def low_stock(_: str) -> str:
+            q = """
+            SELECT p.id AS product_id, p.sku, p.name, s.qty_on_hand, s.reorder_point
+            FROM products p
+            JOIN stock s ON s.product_id = p.id
+            WHERE s.qty_on_hand <= s.reorder_point
+            ORDER BY s.qty_on_hand ASC
+            """
+            return self.sql_tool.execute_read_query(q)
+        return Tool(
+            name="low_stock_report_tool",
+            func=low_stock,
+            description="List products where qty_on_hand <= reorder_point."
+        )
+    
+    def _tool_usage_and_forecast(self) -> Tool:
+        def usage_forcast(days_str: str) -> str:
+            """
+            Input: optional integer string for usage window (days). Defaults to 30.
+            Computes avg daily usage (based on negative stock_movements.change_qty) and 
+            a naive next-7-days forecast. 
+            """
+
+            try:
+                wnd = int(days_str) if days_str.strip() else self.inv_config.usage_window_days
+            except:
+                wnd = self.inv_config.usage_window_days
+
+            since_dt = (datetime.now() - timedelta(days=wnd)).strftime("%Y-%m-%d %H:%M:%S")
+            q = f"""
+            SELECT p.id AS product_id, p.sku, p.name, SUM(CASE WHEN sm.change_qty < 0 THEN -sm.change_qty ELSE 0 END) AS total_out
+            FROM products p
+            LEFT JOIN stock_movements sm ON sm.product_id = p.id AND sm.created_at >= '{since_dt}'
+            GROUP BY p.id, p.sku, p.name
+            """
+            res = self._run_sql_fetchall(q)
+
+            # avg daily usage + simple forecast (avg per day * 7)
+            rows = []
+            for r in res:
+                total_out = r["total_out"] if r["total_out"] is not None else 0
+                avg_daily = total_out / max(wnd, 1)
+                forecast_7 = round(avg_daily * 7, 2)
+                rows.append({
+                    "product_id": r["product_id"],
+                    "sku": r["sku"],
+                    "name": r["name"],
+                    "avg_daily_usage": round(avg_daily, 3), 
+                    "forecast_next_7_days": forecast_7
+                })
+            return json.dumps(rows, indent=2)
+        
+        return Tool(
+            name="usage_and_forecast_tool", 
+            func=usage_forcast,
+            decsription="Input optional number of days (default 30). Returns average daily usage & 7-day forecast per product (JSON)"
         )
