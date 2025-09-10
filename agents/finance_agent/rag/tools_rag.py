@@ -110,7 +110,7 @@ class RAGT:
     
     def load_glossary_from_db(self):
         """Load glossary terms from SQLite database"""
-        conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "data", "erp_v2.db"))
+        conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "data", "erp.db"))
         cursor = conn.cursor()
         
         documents = []
@@ -334,14 +334,6 @@ def smart_rag_search(query: str, agent_type: str = "general") -> str:
     
     return f"No relevant documents found for '{query}'. Please try a different search term or ensure relevant documents are uploaded."
 
-# Helper function for inventory agent
-def inventory_rag(query: str) -> str:
-    return smart_rag_search(query, "inventory")
-
 # Helper function for finance agent  
 def finance_rag(query: str) -> str:
     return smart_rag_search(query, "finance")
-
-# Helper function for sales agent
-def sales_rag(query: str) -> str:
-    return smart_rag_search(query, "sales")
