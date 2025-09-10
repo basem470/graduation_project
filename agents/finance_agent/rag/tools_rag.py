@@ -13,12 +13,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
+PROJECT_ROOT = r"/"
+DOCS_DIR = "data/docs"
+PERSIST_DIR = "data/finance_agent_rag/"
 
-DOCS_DIR = "data/docs/policies"
-PERSIST_DIR = "data/refund_policy_chroma"
-
-print(f"📁 Docs Dir: {DOCS_DIR}")
-print(f"📁 Vector Store: {PERSIST_DIR}")
 
 # --- Load OpenAI API Key ---
 api_key = os.getenv("OPENAI_API_KEY")
@@ -57,7 +55,7 @@ class RAGT:
         
         # Define the specific files you want to process
         target_files = [
-            r"D:\ERP_Agent_Repo\graduation_project\data\docs\policies\refund_policy.pdf"
+            r"data\docs\policies\refund_policy.pdf"
         ]
         
         for file_path in target_files:
@@ -158,7 +156,6 @@ class RAGT:
         
         # Add to vector store
         self.vectorstore.add_documents(split_docs)
-        self.vectorstore.persist()
         
         print(f"✅ Added {len(split_docs)} document chunks to vector store")
         return len(split_docs)
@@ -337,5 +334,12 @@ def smart_rag_search(query: str, agent_type: str = "general") -> str:
 def finance_rag(query: str) -> str:
     return smart_rag_search(query, "finance")
 
+
+
 if __name__ == "__main__":
-    finance_rag("What is the refund policy?")
+    initialize_rag_system()
+    
+    while True:
+        query = input("Enter your query: ")
+        print(smart_rag_search(query, "general"))
+        print("-" * 60)
