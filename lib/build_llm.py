@@ -2,7 +2,7 @@ from typing import Union
 import os
 import dotenv
 from enum import Enum
-from langchain_ollama import OllamaLLM
+from langchain_community.llms.ollama import Ollama
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
@@ -28,7 +28,7 @@ MODEL_STAGE_MAP = {
 }
 
 
-def initialize_llm(model_name: str) -> Union[OllamaLLM, ChatGoogleGenerativeAI, ChatOpenAI]:
+def initialize_llm(model_name: str) -> Union[Ollama, ChatGoogleGenerativeAI, ChatOpenAI]:
     stage = MODEL_STAGE_MAP.get(model_name)
     if stage is None:
         raise ValueError(f"Unknown model '{model_name}'.")
@@ -36,7 +36,7 @@ def initialize_llm(model_name: str) -> Union[OllamaLLM, ChatGoogleGenerativeAI, 
     print(f"Building {stage.value} LLM for model: {model_name}")
 
     if stage == Stage.LOCAL:
-        llm = OllamaLLM(model=model_name, temperature=0.2)
+        llm = Ollama(model=model_name, temperature=0.2)
 
     else:
         if model_name.startswith("gpt-"):

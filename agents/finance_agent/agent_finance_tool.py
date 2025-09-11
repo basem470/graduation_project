@@ -4,6 +4,7 @@ from langchain_community.utilities import SQLDatabase
 from langchain_core.tools import tool
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
+from agents.finance_agent.rag.tools_rag import finance_rag
 from dotenv import load_dotenv  
 import sqlite3
 import os
@@ -31,7 +32,7 @@ vectorstore = Chroma(
 )
 retriever = vectorstore.as_retriever()
 
-from rag.tools_rag import rag_search_tool, finance_rag
+from agents.finance_agent.rag import tools_rag
 
 @tool
 def policy_rag_tool(query: str) -> str:
