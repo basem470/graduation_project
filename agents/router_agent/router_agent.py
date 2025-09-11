@@ -64,10 +64,15 @@ def classify_intent(query: str) -> str:
     prompt = f"""
     You are an intent classifier for an ERP system. 
     Classify the user query into one of these agents only:
-    - SALES_AGENT
-    - FINANCE_AGENT
-    - INVENTORY_AGENT
-    - ANALYTICS_AGENT
+    
+    - SALES_AGENT in charge of the Sales and Marketing team.
+
+    - ANALYTICS_AGENT in charge of the Analytics and reports.
+
+    - FINANCE_AGENT in charge of the Finance and invoices .
+
+    - INVENTORY_AGENT in charge of the Inventory and Supply Chain.
+
 
     Query: "{query}"
 
@@ -80,14 +85,14 @@ def classify_intent(query: str) -> str:
 def execute_agent(agent_type: str, query: str) -> str:
     print(f"🎯 Executing {agent_type} with query: {query}")
     try:
-        if agent_type == "SALES_AGENT" and sales_agent_instance:
-            return sales_agent_instance.invoke( query)
-        elif agent_type == "FINANCE_AGENT" and finance_agent:
+        if agent_type == "FINANCE_AGENT" and finance_agent:
             result = finance_agent.invoke({"input": query})
             return str(result.get("output", result))
         elif agent_type == "INVENTORY_AGENT" and inventory_agent:
             result = inventory_agent.invoke({"input": query})
             return str(result.get("output", result))
+        elif agent_type == "SALES_AGENT" and sales_agent_instance:
+            return sales_agent_instance.invoke( query)
         elif agent_type == "ANALYTICS_AGENT" and analytics_agent_instance:
             result = analytics_agent_instance.invoke({"input": query})
             return str(result.get("output", result))

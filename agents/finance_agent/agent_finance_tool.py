@@ -74,8 +74,24 @@ def anomaly_detector_tool() -> str:
         return f"❌ Anomaly detection failed: {e}"
 
 @tool
-def flag_invoice_for_approval(invoice_number: str, reason: str) -> str:
-    """Creates a pending approval for a suspicious invoice."""
+def flag_invoice_for_approval(input) -> str:
+    """Creates a pending approval for a suspicious invoice.
+    accepts json like object: {
+        "invoice": "INV-000174",
+        "reason": "supsicious"
+    }
+    """
+    if input is None:
+        return "❌ No input provided."
+    if  isinstance(input, dict):
+        invoice_number = input["invoice"]
+        reason = input["reason"]
+    if isinstance(input, str):
+        invoice_number, reason = input.split(",")
+    
+
+
+
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
