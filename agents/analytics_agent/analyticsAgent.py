@@ -327,7 +327,6 @@ class AnalyticsReActAgent:
             return {"error": f"Agent execution failed: {str(e)}"}
     def invoke(self, question: str):
         """Execute a query using the analytics agent."""
-        question = question.replace("```sql", "").replace("```", "")
 
         try:
             result = self.agent_executor.invoke({

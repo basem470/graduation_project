@@ -6,6 +6,7 @@ from langchain_core.tools import Tool
 from dotenv import load_dotenv
 from langchain_community.utilities import SQLDatabase
 import sys, os
+from langchain.schema import HumanMessage
 
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 load_dotenv()
@@ -60,29 +61,27 @@ except Exception as e:
 # 3. Intent Classification Tool
 # -------------------------------
 def classify_intent(query: str) -> str:
-    print(f"🧐 Classifying intent for query: {query}")
-    q = query.lower()
-    if any(k in q for k in ["customer", "order", "lead", "ticket"]):
-        print("👉 Routed to: SALES_AGENT")
-        return "SALES_AGENT"
-    elif any(k in q for k in ["invoice", "payment", "ledger", "refund", "suspicious"]):
-        print("👉 Routed to: FINANCE_AGENT")
-        return "FINANCE_AGENT"
-    elif any(k in q for k in ["stock", "inventory", "supplier", "po", "purchase order"]):
-        print("👉 Routed to: INVENTORY_AGENT")
-        return "INVENTORY_AGENT"
-    elif any(k in q for k in ["revenue", "kpi", "forecast", "drop", "trend", "why did", "top", "customers","analyze"]):
-        print("👉 Routed to: ANALYTICS_AGENT")
-        return "ANALYTICS_AGENT"
-    else:
-        print("👉 Defaulting to: SALES_AGENT")
-        return "SALES_AGENT"
+    prompt = f"""
+    You are an intent classifier for an ERP system. 
+    Classify the user query into one of these agents only:
+    - SALES_AGENT
+    - FINANCE_AGENT
+    - INVENTORY_AGENT
+    - ANALYTICS_AGENT
+
+    Query: "{query}"
+
+    Respond ONLY with the agent name.
+    """
+    response = llm([HumanMessage(content=prompt)])
+    agent_name = response.content.strip().upper()
+    return agent_name
 
 def execute_agent(agent_type: str, query: str) -> str:
     print(f"🎯 Executing {agent_type} with query: {query}")
     try:
         if agent_type == "SALES_AGENT" and sales_agent_instance:
-            return sales_agent_instance.invoke({"input": query})
+            return sales_agent_instance.invoke( query)
         elif agent_type == "FINANCE_AGENT" and finance_agent:
             result = finance_agent.invoke({"input": query})
             return str(result.get("output", result))
@@ -181,7 +180,7 @@ print("✅ Router Agent ready")
 # -------------------------------
 # 6. Test Function
 # -------------------------------
-def test_router_agent(query: str):
+def run_query(query: str):
     print("=" * 60, "Question" , "=" * 60)
     print(f"\n🧪 Testing Router Agent with query: '{query}'")
     print("=" * 60)
@@ -198,5 +197,5 @@ def test_router_agent(query: str):
         return f"Error: {e}"
 
 if __name__ == "__main__":
-    test_query = "analyze invoices amouts based on status "
-    test_router_agent(test_query)
+    test_query = "who are the most paying customers?"
+    run_query(test_query)
