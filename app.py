@@ -1,6 +1,7 @@
 import streamlit as st
 import datetime
 import json
+from agents.router_agent.router_agent import run_query
 #import router here
 
 # --- Page Configuration ---
@@ -81,8 +82,7 @@ def get_assistant_response(user_message):
     Returns:
         str: The assistant's response
     """
-    # Simple echo response - replace this with your actual logic
-    return f"Echo: {user_message}" #rutern router.invoke use messages
+    return run_query(user_message)
 
 # --- Chat History Management ---
 def create_new_session():
