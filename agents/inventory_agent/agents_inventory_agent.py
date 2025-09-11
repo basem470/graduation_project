@@ -1,7 +1,7 @@
 # agents/inventory_agent.py
 from langgraph.prebuilt import create_react_agent
 from agents_llm_setup import llm
-from agents_inventory_tool import inventory_tools  
+from agents.inventory_agent.agents_inventory_tool import inventory_tools
 
 # System prompt for inventory management
 system_prompt = """You are an Inventory & Supply Chain Agent for Helios Dynamics ERP.

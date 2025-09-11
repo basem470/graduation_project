@@ -12,7 +12,7 @@ sys.path.insert(0, project_root)
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
-from langchain_ollama import OllamaEmbeddings
+from langchain_community.llms.ollama import Ollama
 from langchain.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
@@ -99,7 +99,7 @@ def embed_once(file_path: str, force_recreate: bool = False) -> None:
         print(f"Chunk {i+1}: {doc.page_content[:100]}...")
 
     # Initialize embeddings
-    embeddings = OllamaEmbeddings(model=OLLAMA_EMBED_MODEL)
+        embeddings = OllamaEmbeddings(model=OLLAMA_EMBED_MODEL)
     print(f"Embedding model '{OLLAMA_EMBED_MODEL}' initialized.")
 
     # Create ChromaDB
