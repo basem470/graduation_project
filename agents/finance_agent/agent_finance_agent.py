@@ -1,8 +1,14 @@
 # agents/finance/agent.py
+import os
+import sys
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, project_root)
+
 from langgraph.prebuilt import create_react_agent
 from agents_llm_setup import llm
 from agent_finance_tool import finance_tools
-
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, project_root)
 # --- Create Finance Agent ---
 finance_agent = create_react_agent(
     model=llm,

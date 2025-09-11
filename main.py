@@ -7,3 +7,4 @@ sales_agent.query("Hello")
 
 analytics_agent = AnalyticsReActAgent()
 analytics_agent.query("what are the top selling products?")
+

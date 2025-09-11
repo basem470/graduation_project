@@ -5,8 +5,11 @@ from langchain_openai import ChatOpenAI
 from langchain_core.tools import Tool
 from dotenv import load_dotenv
 import os
+import sys
 
-# Load environment variables
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, project_root)
+
 load_dotenv()
 
 # -------------------------------
@@ -43,7 +46,7 @@ except Exception as e:
     inventory_agent = None
 
 try:
-    from agents.analytics_agent.analyticsAgent import analytics_agent
+    from agents.analytics_agent.analyticsAgent import AnalyticsReActAgent
     print("✅ Analytics Agent loaded")
 except Exception as e:
     print(f"⚠️ Failed to load Analytics Agent: {e}")
