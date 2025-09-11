@@ -77,7 +77,7 @@ intent_tool = Tool(
 # -------------------------------
 try:
     from langchain_community.utilities import SQLDatabase
-    DB_PATH = r"db\erp.db"
+    DB_PATH = r"db/erp.db"
     if not os.path.exists(DB_PATH):
         raise FileNotFoundError(f"❌ Database not found at: {DB_PATH}")
 
