@@ -6,17 +6,17 @@ test_queries = [
     # 1. Basic stock check (should work)
     "Show me products that need reordering",
     
-    # 2. Simple forecast (use fallback)
-    "Predict demand for product SKU-0134 for next 30 days",
+    # # 2. Simple forecast (use fallback)
+    # "Predict demand for product SKU-0134 for next 30 days",
     
-    # 3. Stock level check
-    "What is the current stock level for product SKU-0134?",
+    # # 3. Stock level check
+    # "What is the current stock level for product SKU-0134?",
     
     # 4. RAG search
-    "Search for supplier contract terms",
+    "What is the validity period of the proposal according to the supplier contracts?",
     
-    # 6. Simple query
-    "How does the inventory system work?",
+    # # 6. Simple query
+    # "How does the inventory system work?",
 ]
 
 print("🚀 Testing Fixed Inventory Agent\n")

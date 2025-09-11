@@ -1,0 +1,135 @@
+# agents/router.py
+
+from langgraph.prebuilt import create_react_agent
+from langchain_core.messages import SystemMessage
+from langchain_openai import ChatOpenAI
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+
+
+# 1. LLM Setup
+llm = ChatOpenAI(
+    model="gpt-4o",
+    temperature=0,
+    api_key=os.getenv("OPENAI_API_KEY")
+)
+
+
+# 2. Import All Agents
+
+try:
+    from sales_agent.salesAgent import SalesReactAgent
+    sales_agent_instance = SalesReactAgent()
+except Exception as e:
+    print(f"⚠️ Failed to load Sales Agent: {e}")
+    sales_agent_instance = None
+
+try:
+    from finance_agent.agent_finance_agent import finance_agent
+except Exception as e:
+    print(f"⚠️ Failed to load Finance Agent: {e}")
+
+try:
+    from inventory_agent.agents_inventory_agent import inventory_agent
+except Exception as e:
+    print(f"⚠️ Failed to load Inventory Agent: {e}")
+
+try:
+    from analytics_agent.analyticsAgent import analytics_agent
+except Exception as e:
+    print(f"⚠️ Failed to load Analytics Agent: {e}")
+
+
+# 3. Intent Classification Tool
+
+from langchain_core.tools import Tool
+
+def classify_intent(query: str) -> str:
+    """Classify query into the right agent module."""
+    query_lower = query.lower().strip()
+    
+    # Sales & CRM
+    if any(k in query_lower for k in ["customer", "order", "lead", "ticket", "create order", "new customer"]):
+        return "SALES_AGENT"
+    
+    # Finance
+    elif any(k in query_lower for k in ["invoice", "payment", "ledger", "refund", "suspicious", "fraud", "flag invoice"]):
+        return "FINANCE_AGENT"
+    
+    # Inventory & Supply Chain
+    elif any(k in query_lower for k in ["stock", "inventory", "supplier", "purchase order", "po", "receive goods", "low stock"]):
+        return "INVENTORY_AGENT"
+    
+    # Analytics & KPIs
+    elif any(k in query_lower for k in ["revenue", "kpi", "metric", "forecast", "drop", "why did", "trend", "chart"]):
+        return "ANALYTICS_AGENT"
+    
+    else:
+        return "SALES_AGENT"  # Default fallback
+
+intent_tool = Tool(
+    name="Intent Classifier",
+    func=classify_intent,
+    description="Use this first to determine which agent should handle the query."
+)
+
+
+# 4. SQL Tool (for approvals, messages, etc.)
+
+try:
+    from langchain_community.utilities import SQLDatabase
+    DB_PATH = r"db\erp.db"
+    if not os.path.exists(DB_PATH):
+        raise FileNotFoundError(f"❌ Database not found at: {DB_PATH}")
+    
+    DB_URI = f"sqlite:///{DB_PATH.replace(os.sep, '/')}"
+    db = SQLDatabase.from_uri(DB_URI)
+
+    def run_sql(query: str) -> str:
+        try:
+            return db.run(query)
+        except Exception as e:
+            return f"SQL Error: {e}"
+
+    sql_tool = Tool(
+        name="RouterSQL",
+        func=run_sql,
+        description="Use this to check approvals, messages, or other status info."
+    )
+except Exception as e:
+    print(f"⚠️ SQL Tool failed: {e}")
+    sql_tool = Tool(
+        name="RouterSQL",
+        func=lambda x: "Database currently unavailable.",
+        description="Fallback SQL tool"
+    )
+
+
+# 5. Create Router Agent
+
+tools = [intent_tool, sql_tool]
+
+system_prompt = """
+You are the <Router Agent> for Helios Dynamics ERP.
+Your job is to:
+1. Use 'Intent Classifier' to route queries to the right agent.
+2. If needed, use 'RouterSQL' to check pending approvals, messages, or statuses.
+3. Never guess — always use tools.
+
+Available agents:
+- SALES_AGENT: Customers, orders, leads, tickets
+- FINANCE_AGENT: Invoices, payments, fraud detection, ledger
+- INVENTORY_AGENT: Stock levels, purchase orders, supplier contracts
+- ANALYTICS_AGENT: Revenue trends, KPIs, forecasting, reports
+
+Always respond clearly with routing decisions or direct answers.
+"""
+
+router_agent = create_react_agent(
+    model=llm,
+    tools=tools,
+    state_modifier=system_prompt
+)

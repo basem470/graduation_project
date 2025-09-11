@@ -129,79 +129,56 @@ def receive_po(po_id: int, product_sku: str, received_qty: int) -> str:
         return f"❌ Failed to receive PO: {e}"
 # --- Tool 4: Document RAG Search ---
 # --- Tool 4: Document RAG Search (FIXED) ---
+
 @tool
 def doc_rag_tool(query: str) -> str:
-    """Searches supplier contracts and policies."""
+    """Searches supplier contracts and policies using RAG."""
     try:
-        # Import correct modules
         from langchain_chroma import Chroma
-        from langchain_core.documents import Document
-        from langchain.text_splitter import RecursiveCharacterTextSplitter
         from langchain_openai import OpenAIEmbeddings
-        
-        # Load environment variables
-        load_dotenv()
+        from langchain_community.document_loaders import PyPDFLoader
+        from langchain.text_splitter import RecursiveCharacterTextSplitter
+        import os
+
+        # Load API key
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            return "❌ OPENAI_API_KEY not found in .env file"
+            return "❌ OPENAI_API_KEY not found."
 
         # Paths
-        DOCS_DIR = os.path.abspath(r"data/docs/contracts")
-        PERSIST_DIR = os.path.abspath(r"data/chroma_db_inventory")
+        DOCS_DIR = os.path.abspath(r"data\docs\Contract") 
+        PERSIST_DIR = DOCS_DIR
 
         # Initialize embeddings
         embedding_model = OpenAIEmbeddings(api_key=api_key)
 
-        # Check if vector store already exists
-        if os.path.exists(PERSIST_DIR) and any(os.scandir(PERSIST_DIR)):
-            print("✅ Loading existing inventory vector store...")
+        # Check if vector store exists
+        if os.path.exists(PERSIST_DIR) and len(os.listdir(PERSIST_DIR)) > 0:
+            print("✅ Loading existing inventory RAG database...")
             retriever = Chroma(
                 persist_directory=PERSIST_DIR,
                 embedding_function=embedding_model
             ).as_retriever(search_kwargs={"k": 3})
         else:
-            print("🔄 Creating new vector store for inventory docs...")
-
-            # Create list of documents
+            print("🔄 Building new RAG index for supplier contracts...")
+            os.makedirs(PERSIST_DIR, exist_ok=True)
             documents = []
-            if not os.path.exists(DOCS_DIR):
-                return f"❌ Documents directory not found: {DOCS_DIR}"
 
             for filename in os.listdir(DOCS_DIR):
                 filepath = os.path.join(DOCS_DIR, filename)
-                if not os.path.isfile(filepath):
-                    continue
-                try:
-                    if filename.endswith(".pdf"):
-                        from langchain_community.document_loaders import PyPDFLoader
-                        loader = PyPDFLoader(filepath)
-                        docs = loader.load()
-                    elif filename.endswith(".txt") or filename.endswith(".md"):
-                        from langchain_community.document_loaders import TextLoader
-                        loader = TextLoader(filepath, encoding='utf-8')
-                        docs = loader.load()
-                    else:
-                        continue
-
-                    # Add metadata
+                if filename.endswith(".pdf"):
+                    loader = PyPDFLoader(filepath)
+                    docs = loader.load()
                     for doc in docs:
-                        doc.metadata.update({
-                            "source": filename,
-                            "category": "contract",
-                            "agent": "inventory"
-                        })
+                        doc.metadata["source"] = filename
                     documents.extend(docs)
-                except Exception as e:
-                    print(f"⚠️ Failed to load {filename}: {e}")
 
             if not documents:
-                return "No valid documents found in contracts folder."
+                return "No documents found in contracts folder."
 
-            # Split and embed
             text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
             split_docs = text_splitter.split_documents(documents)
 
-            # Create vector store
             vectordb = Chroma.from_documents(
                 documents=split_docs,
                 embedding=embedding_model,
@@ -209,22 +186,39 @@ def doc_rag_tool(query: str) -> str:
             )
             retriever = vectordb.as_retriever(search_kwargs={"k": 3})
 
-        # Perform retrieval
+        # Run retrieval
         results = retriever.invoke(query)
         if not results:
-            return "No relevant policy or contract found."
+            return "No relevant clauses found in supplier contracts."
 
         # Format response
-        context = "\n\n".join([
-            f"📄 [{r.metadata.get('source', 'unknown')}]\n{r.page_content}"
-            for r in results
-        ])
-        return f"Found {len(results)} relevant document(s):\n\n{context}"
+        output = [f"🔍 Found {len(results)} relevant sections:"]
+        for i, r in enumerate(results, 1):
+            content = r.page_content.strip()
+            source = r.metadata.get("source", "unknown")
+            output.append(f"\n📄 Result {i} (from {source}):")
+            output.append(content)
+        return "\n".join(output)
 
-    except ImportError as e:
-        return f"❌ Missing package: {e.name}. Run: pip install {e.name}"
     except Exception as e:
-        return f"❌ RAG Tool Error: {str(e)}"
+        return f"❌ RAG Search Failed: {str(e)}"
+        # Run retrieval
+        results = retriever.invoke(query)
+        if not results:
+            return "No relevant clauses found in supplier contracts."
+
+        # Format response
+        output = [f"🔍 Found {len(results)} relevant sections:"]
+        for i, r in enumerate(results, 1):
+            content = r.page_content.strip()
+            source = r.metadata.get("source", "unknown")
+            output.append(f"\n📄 Result {i} (from {source}):")
+            output.append(content)
+        return "\n".join(output)
+
+    except Exception as e:
+        return f"❌ RAG Search Failed: {str(e)}"
+
 
 # --- Tool 5: Get Product Stock Level ---
 @tool
