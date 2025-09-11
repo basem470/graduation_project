@@ -10,7 +10,8 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from langchain.agents import Tool, create_react_agent, AgentExecutor
+from langchain.tools import Tool
+from langchain.agents import create_react_agent, AgentExecutor
 from langchain.prompts import PromptTemplate
 from langchain.memory import ConversationBufferMemory
 from langchain_community.utilities import SQLDatabase
@@ -238,9 +239,10 @@ class SQLQueryTool:
                     current_data = self.db.run(preview_query)
                     
                     # Count affected rows
-                    count_query = f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"
-                    count_result = self.db.run(count_query)
-                    row_count = int(count_result.strip()) if count_result.strip().isdigit() else 0
+                    with sqlite3.connect(self.config.db_path) as conn:
+                        cur = conn.cursor()
+                        cur.execute(f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}")
+                        row_count = cur.fetchone()[0] or 0
                     
                     return f"Current data that will be updated:\n{current_data}", row_count
             
@@ -257,9 +259,10 @@ class SQLQueryTool:
                     current_data = self.db.run(preview_query)
                     
                     # Count affected rows
-                    count_query = f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"
-                    count_result = self.db.run(count_query)
-                    row_count = int(count_result.strip()) if count_result.strip().isdigit() else 0
+                    with sqlite3.connect(self.config.db_path) as conn:
+                        cur = conn.cursor()
+                        cur.execute(f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}")
+                        row_count = cur.fetchone()[0] or 0
                     
                     return f"Data that will be deleted:\n{current_data}", row_count
             
@@ -366,7 +369,7 @@ Result: {result if result else 'Operation completed successfully'}
         
 class InventorySQL:
     """
-    Small helper aroung sqlite3 for multi-statement transactions
+    Small helper around sqlite3 for multi-statement transactions
     (needed when creating a PO then its items).
     """
     def __init__(self, db_path: str):
@@ -390,7 +393,7 @@ class InventorySQL:
             for item in items:
                 cur.execute(
                     "INSERT INTO po_items (po_id, product_id, quantity, unit_cost) VALUES (?, ?, ?, ?)",
-                    (po_id, int(item["product_id"]), int(item["quanitity"]), float(item["unit_cost"]))
+                    (po_id, int(item["product_id"]), int(item["quantity"]), float(item["unit_cost"]))
                 )
             conn.commit()
             return po_id
@@ -431,7 +434,7 @@ class InventoryAgent2:
 
         # === LLM + memory ===
         self.llm = build_llm(model_name)
-        self.memory = ConversationBufferMemory(memory_key="chat_histroy", 
+        self.memory = ConversationBufferMemory(memory_key="chat_history", 
                                                return_messages=True, 
                                                input_key="input", 
                                                output_key="output")
@@ -443,12 +446,13 @@ class InventoryAgent2:
             self._tool_low_stock_report(),
             self._tool_usage_and_forecast(), 
             self._tool_reorder_planner(), 
-            self._tool_propose_po(),                        # writes to approval (pending) via preview/confirm
+            self._tool_propose_po(),
+            self._tool_confirm_po_proposal(),                                                # writes to approval (pending) via preview/confirm
             self._tool_commit_po_from_approval(),           # transactional write, also protected by preview/confirm
             self._create_write_preview_tool(),              # generic write preview (INSERT/UPDATE/DELETE)
             self._create_execute_confirmed_write_tool(),    # generic write confirm
         ]
-        prompt = self.create_react_prompt()
+        prompt = self._create_react_prompt()
         agent = create_react_agent(llm=self.llm, tools=tools, prompt=prompt)
         self.agent_executor = AgentExecutor.from_agent_and_tools(
             agent=agent, 
@@ -468,7 +472,7 @@ class InventoryAgent2:
         Schema: 
         {self.schema}
         """
-        return Tool(name="Inventory_SQL_Read", func=self.sql_tool_execute_read_query, description=desc)
+        return Tool(name="Inventory_SQL_Read", func=self.sql_tool.execute_read_query, description=desc)
     
     def _create_write_preview_tool(self) -> Tool:
         desc = "Preview any INSERT/UPDATE/DELETE first; returns a token to confirm later."
@@ -496,7 +500,7 @@ class InventoryAgent2:
         )
     
     def _tool_usage_and_forecast(self) -> Tool:
-        def usage_forcast(days_str: str) -> str:
+        def usage_forecast(days_str: str) -> str:
             """
             Input: optional integer string for usage window (days). Defaults to 30.
             Computes avg daily usage (based on negative stock_movements.change_qty) and 
@@ -534,8 +538,8 @@ class InventoryAgent2:
         
         return Tool(
             name="usage_and_forecast_tool", 
-            func=usage_forcast,
-            decsription="Input optional number of days (default 30). Returns average daily usage & 7-day forecast per product (JSON)"
+            func=usage_forecast,
+            description="Input optional number of days (default 30). Returns average daily usage & 7-day forecast per product (JSON)"
         )
     
     def _tool_reorder_planner(self) -> Tool:
@@ -547,7 +551,7 @@ class InventoryAgent2:
                 "safety_days": 3,
                 "moq": 10
             }
-            For each product, recommends qty = max(avg_daily * (lead + dafety) - qty_on_hand, 0) rounded up to MOQ.
+            For each product, recommends qty = max(avg_daily * (lead + safety) - qty_on_hand, 0) rounded up to MOQ.
             """
             try: 
                 params = json.loads(params_json) if params_json.strip() else {}
@@ -596,7 +600,7 @@ class InventoryAgent2:
         return Tool(
             name="reorder_planner_tool",
             func=plan,
-            description="Inoput JSON with lead_time_days/safety_days/moq; returns JSON list of recommendeed_qty per product."
+            description="Input JSON with lead_time_days/safety_days/moq; returns JSON list of recommended_qty per product."
         )
     
     def _tool_propose_po(self) -> Tool:
@@ -629,12 +633,44 @@ class InventoryAgent2:
                 f"📋 WRITE OPERATION PREVIEW\nOperation: PROPOSE_PO\n"
                 f"Rows affected (items): {len(items)}\n"
                 f"{affected}\n\n"
-                f"CONFIRMATION REQUIRED: token {token}"
+                f"CONFIRMATION REQUIRED: token {token}\n"
             )
         return Tool(
             name="propose_po_tool", 
             func=propose, 
             description="Preview a new PO proposal (insert a pending row into approvals on confirm)."
+        )
+    
+    def _tool_confirm_po_proposal(self) -> Tool:
+        def confirm(token_and_requester: str) -> str:
+            # expects: "token=ABCDEFGH requested_by=ahmed"
+            try: 
+                token = token_and_requester.split("token=")[1].split()[0]
+                requested_by = token_and_requester.split("requested_by=")[1].split()[0]
+            except:
+                return "Usage: token=ABCDEFGH requested_by=yourname"
+            
+            write_op = self.confirmation_manager.confirm_write(token)
+            if not write_op or write_op.operation_type != "PROPOSE_PO":
+                return f"Invalid or expired token for proposal: {token}"
+            
+            # recover the proposal payload we put in "affected_data"
+            # it was "Proposed PO -> approvals.pending\n{JSON}"
+            try:
+                payload_json = write_op.affected_data.split("\n", 1)[1]
+            except Exception:
+                return "Could not recover proposal payload."
+            
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            approval_id = self._execute_returning_id(
+                "INSERT INTO approvals (module, payload_json, status, requested_by, created_at) VALUES (?, ?, 'pending', ?, ?)",
+                ("inventory", payload_json, requested_by, now)
+            )
+            return f"✅ Proposal saved to approvals. approval_id={approval_id}"
+        return Tool(
+            name="confirm_po_proposal_tool",
+            func=confirm,
+            description="Consumes the PROPOSE_PO token and inserts a pending row into approvals. Input: 'token=... requested_by=...'."
         )
     
     def _tool_commit_po_from_approval(self) -> Tool:
@@ -665,7 +701,7 @@ class InventoryAgent2:
                 token = self.confirmation_manager.add_pending_write(
                     sql_query=f"APPROVAL:{approval_id}",
                     operation_type="COMMIT_APPROVED_PO", 
-                    affected_data=preview_text + "\n" + json.dump(payload, indent=2), 
+                    affected_data=preview_text + "\n" + json.dumps(payload, indent=2), 
                     row_count=len(items)
                 )
                 return (
@@ -675,7 +711,7 @@ class InventoryAgent2:
                     f"CONFIRMATION REQUIRED: token {token}"
                 )
             
-            elif s.lower().startwith("confirm"):
+            elif s.lower().startswith("confirm"):
                 try:
                     token = s.split("token=")[1].split()[0]
                     decided_by = s.split("decided_by=")[1].split()[0]
@@ -690,7 +726,7 @@ class InventoryAgent2:
                 approval_id = int(write_op.sql_query.split(":")[1])
                 row = self._fetchone("SELECT payload_json FROM approvals WHERE id=?", (approval_id,))
                 if not row:
-                    return f"Approval id={approval_id} nor found."
+                    return f"Approval id={approval_id} not found."
                 
                 payload = json.loads(row["payload_json"])
                 supplier_id = int(payload["supplier_id"])
@@ -707,11 +743,11 @@ class InventoryAgent2:
                 )
 
                 return (
-                    f"✅ PO commited. purchase_orders.id={po_id}\n"
+                    f"✅ PO committed. purchase_orders.id={po_id}\n"
                     f"approval {approval_id} -> approved by {decided_by} at {now}"
                 )
             else:
-                return "Usage:\n- preview approval_id=123\n- confirm token=ABCDEFGH decide_by=alice"
+                return "Usage:\n- preview approval_id=123\n- confirm token=ABCDEFGH decided_by=alice"
         return Tool(
             name="commit_po_from_approval_tool",
             func=commit,
@@ -783,12 +819,22 @@ class InventoryAgent2:
         conn.commit()
         conn.close()
 
+    def _execute_returning_id(self, query: str, params: tuple=()) -> int:
+        conn = sqlite3.connect(self.config.db_path)
+        try:
+            cur = conn.cursor()
+            cur.execute(query, params)
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
     # ============ Agent entrypoint ============
     def _format_chat_history(self) -> str:
         if not self.chat_history.buffer:
             return "No previous conversation."
         formatted = []
-        for m in self.chat_history.buffer[-6]:
+        for m in self.chat_history.buffer[-6:]:
             role = "Human" if m.type == "human" else "Assistant"
             formatted.append(f"{role}: {m.content}")
         return "\n".join(formatted) if formatted else "No previous conversation."
@@ -801,7 +847,7 @@ class InventoryAgent2:
             self.chat_history.save_context({"input": question}, {"output": output})
             return {"success": True, "result": output, "question": question, "error": None}
         except Exception as e:
-            return {"success": False, "result": None, "question": question, "error": e}
+            return {"success": False, "result": None, "question": question, "error": str(e)}
         
 def get_test_queries() -> List[str]:
     return [
@@ -828,5 +874,5 @@ if __name__ == "__main__":
     agent = InventoryAgent2()
     run_tests(agent)
     print("\nTip:")
-    print("- After proposing a PO, run: commit_po_from_approval with 'preview approval_id=123'")
+    print("- After proposing a PO, run: commit_po_from_approval_tool with 'preview approval_id=123'")
     print("- Then: commit_po_from_approval_tool with 'confirm token=ABCDEFGH decided_by=Ahmed'")
