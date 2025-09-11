@@ -278,6 +278,7 @@ class SQLQueryTool:
     def execute_read_query(self, query: str) -> str:
         """Execute read-only SQL query."""
         try:
+            query = query.replace('```sql', '').replace('```', '')
             query_upper = query.strip().upper()
             if not query_upper.startswith('SELECT'):
                 return "Error: Only SELECT queries are allowed in read mode."
@@ -540,6 +541,54 @@ Thought: {agent_scratchpad}"""
         Returns:
             Dictionary containing result and metadata
         """
+        try:
+            logger.info(f"Processing query: {question}")
+            
+            # Format chat history
+            chat_history_str = self._format_chat_history()
+            
+            # Invoke agent with chat history
+            result = self.agent_executor.invoke({
+                "input": question,
+                "chat_history": chat_history_str
+            })
+            
+            # Extract the output
+            output = result.get("output", str(result))
+            
+            # Use save_context to update conversation memory
+            self.chat_history.save_context(
+                {"input": question},
+                {"output": output}
+            )
+            
+            return {
+                "success": True,
+                "result": output,
+                "question": question,
+                "error": None
+            }
+            
+        except Exception as e:
+            logger.error(f"Agent execution error: {e}")
+            return {
+                "success": False,
+                "result": None,
+                "question": question,
+                "error": str(e)
+            }
+    
+    def invoke(self, question: str) -> Dict[str, Any]:
+        """
+        Execute a query using the agent.
+        
+        Args:
+            question: Natural language question
+            
+        Returns:
+            Dictionary containing result and metadata
+        """
+
         try:
             logger.info(f"Processing query: {question}")
             

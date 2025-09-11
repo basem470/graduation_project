@@ -325,7 +325,20 @@ class AnalyticsReActAgent:
             return result
         except Exception as e:
             return {"error": f"Agent execution failed: {str(e)}"}
+    def invoke(self, question: str):
+        """Execute a query using the analytics agent."""
+        question = question.replace("```sql", "").replace("```", "")
 
+        try:
+            result = self.agent_executor.invoke({
+                "question": question,
+                "tools": self.tools,
+                "schema_summary": schema_summary,
+                "tool_names": [tool.name for tool in self.tools]
+            })
+            return result
+        except Exception as e:
+            return {"error": f"Agent execution failed: {str(e)}"}
 # --- Main Execution ---
 def main():
     """Main execution function for testing the agent."""
