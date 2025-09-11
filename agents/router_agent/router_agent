@@ -21,24 +21,24 @@ llm = ChatOpenAI(
 # 2. Import All Agents
 
 try:
-    from sales_agent.salesAgent import SalesReactAgent
+    from agents.sales_agent.salesAgent import SalesReactAgent
     sales_agent_instance = SalesReactAgent()
 except Exception as e:
     print(f"⚠️ Failed to load Sales Agent: {e}")
     sales_agent_instance = None
 
 try:
-    from finance_agent.agent_finance_agent import finance_agent
+    from agents.finance_agent.agent_finance_agent import finance_agent
 except Exception as e:
     print(f"⚠️ Failed to load Finance Agent: {e}")
 
 try:
-    from inventory_agent.agents_inventory_agent import inventory_agent
+    from agents.inventory_agent.agents_inventory_agent import inventory_agent
 except Exception as e:
     print(f"⚠️ Failed to load Inventory Agent: {e}")
 
 try:
-    from analytics_agent.analyticsAgent import analytics_agent
+    from agents.analytics_agent.analyticsAgent import analytics_agent
 except Exception as e:
     print(f"⚠️ Failed to load Analytics Agent: {e}")
 
