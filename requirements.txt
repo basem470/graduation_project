@@ -9,3 +9,4 @@ streamlit
 scikit-learn
 langgraph
 pypdf
+langchain_openai

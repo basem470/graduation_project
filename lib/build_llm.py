@@ -5,7 +5,14 @@ from enum import Enum
 from langchain_community.llms.ollama import Ollama
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
+import sys
 
+# Get the path to the current file's directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Navigate up two directories to reach the project root
+project_root = os.path.dirname(os.path.dirname(current_dir))
+# Add the project root to the Python path
+sys.path.insert(0, project_root)
 
 class Stage(Enum):
     LOCAL = "local"

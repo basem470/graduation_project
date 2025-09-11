@@ -407,7 +407,7 @@ class InventoryConfig:
     default_safety_days: int = 3
     default_moq: int = 10 # Minimum Order Quantity
 
-class InventoryAgent:
+class InventoryAgent2:
     """
     Inventory & Supply-Chain ReAct agent
     - read-only SQL tool
@@ -661,4 +661,172 @@ class InventoryAgent:
                 supplier_id = int(payload["supplier_id"])
                 items = payload["items"]
 
+                preview_text = f"Will create purchase_order (supplier_id={supplier_id} and {len(items)} po_items.)"
+                token = self.confirmation_manager.add_pending_write(
+                    sql_query=f"APPROVAL:{approval_id}",
+                    operation_type="COMMIT_APPROVED_PO", 
+                    affected_data=preview_text + "\n" + json.dump(payload, indent=2), 
+                    row_count=len(items)
+                )
+                return (
+                    f"📋WRITE OPERATION PREVIEW\nOperation: COMMIT_APPROVED_PO\n"
+                    f"Rows affected (items): {len(items)}\n"
+                    f"{preview_text}\n"
+                    f"CONFIRMATION REQUIRED: token {token}"
+                )
+            
+            elif s.lower().startwith("confirm"):
+                try:
+                    token = s.split("token=")[1].split()[0]
+                    decided_by = s.split("decided_by=")[1].split()[0]
+                except:
+                    return "Usage: confirm token=ABCDEFGH decided_by=alice"
                 
+                write_op = self.confirmation_manager.confirm_write(token)
+                if not write_op:
+                    return f"Invalid or expired token: {token}"
+                
+                # get approval_id back from write_op.sql_query
+                approval_id = int(write_op.sql_query.split(":")[1])
+                row = self._fetchone("SELECT payload_json FROM approvals WHERE id=?", (approval_id,))
+                if not row:
+                    return f"Approval id={approval_id} nor found."
+                
+                payload = json.loads(row["payload_json"])
+                supplier_id = int(payload["supplier_id"])
+                items = payload["items"]
+
+                # Run the transactional insert for PO + items
+                po_id = self.inv_sql.run_tx_create_po(supplier_id, items)
+
+                # Mark approval as approved
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self._execute(
+                    "UPDATE approvals SET status='approved', decided_by=?, decided_at=? WHERE id=?",
+                    (decided_by, now, approval_id)
+                )
+
+                return (
+                    f"✅ PO commited. purchase_orders.id={po_id}\n"
+                    f"approval {approval_id} -> approved by {decided_by} at {now}"
+                )
+            else:
+                return "Usage:\n- preview approval_id=123\n- confirm token=ABCDEFGH decide_by=alice"
+        return Tool(
+            name="commit_po_from_approval_tool",
+            func=commit,
+            description="Preview/commit an approved PO from approvals payload. See usage in docstring."
+        )
+    
+    # ============ ReAct prompt ============
+    def _create_react_prompt(self) -> PromptTemplate:
+        template = """
+        You are the Inventory & Supply-Chain agent for a small ERP.
+        You can read inventory tables, compute usage/forecasts, plan reorders, and safely propose/commit purchase orders.
+
+        TOOLS:
+        {tools}
+
+        RULES FOR WRITES:
+        1) ALWAYS preview write operations first (either Preview_Write_Operation or the propose/commit tools that yield a token).
+        2) Execute only after user confirms with the token.
+        3) Never run destructive SQL without WHERE.
+
+        CONVERSATION MEMORY:
+        {chat_history}
+
+        Use the exact ReAct format:
+
+        Question: the user input
+        Thought: reasoning
+        Action: one of [{tool_names}]
+        Action Input: input to the action
+        Observation: tool result
+        ... (repeat as needed)
+        Thought: I now know the final answer
+        Final Answer: answer
+
+        Begin!
+
+        Question: {input}
+        Thought: {agent_scratchpad}
+        """
+
+        return PromptTemplate(
+            template=template,
+            input_variables=["input", "agent_scratchpad", "tools", "tool_names", "chat_history"]
+        )
+    
+    # ============ DB Helpers ============
+    def _run_sql_fetchall(self, query: str, params: Optional[tuple]=None) -> List[sqlite3.Row]:
+        conn = sqlite3.connect(self.config.db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(query, params or ())
+        rows = cur.fetchall()
+        conn.close()
+        return rows
+    
+    def _fetchone(self, query: str, params: tuple) -> Optional[sqlite3.Row]:
+        conn = sqlite3.connect(self.config.db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(query, params)
+        row = cur.fetchone()
+        conn.close()
+        return row
+    
+    def _execute(self, query: str, params: tuple=()) -> None:
+        conn = sqlite3.connect(self.config.db_path)
+        cur = conn.cursor()
+        cur.execute(query, params)
+        conn.commit()
+        conn.close()
+
+    # ============ Agent entrypoint ============
+    def _format_chat_history(self) -> str:
+        if not self.chat_history.buffer:
+            return "No previous conversation."
+        formatted = []
+        for m in self.chat_history.buffer[-6]:
+            role = "Human" if m.type == "human" else "Assistant"
+            formatted.append(f"{role}: {m.content}")
+        return "\n".join(formatted) if formatted else "No previous conversation."
+    
+    def query(self, question: str) -> Dict[str, Any]:
+        try: 
+            ch = self._format_chat_history()
+            result = self.agent_executor.invoke({"input": question, "chat_history": ch})
+            output = result.get("output", str(result))
+            self.chat_history.save_context({"input": question}, {"output": output})
+            return {"success": True, "result": output, "question": question, "error": None}
+        except Exception as e:
+            return {"success": False, "result": None, "question": question, "error": e}
+        
+def get_test_queries() -> List[str]:
+    return [
+        "Show low stock items.",
+        "Compute usage and forecast for the last 30 days", 
+        "Plan reorders with lead_time_days=7, safety_days=3, moq=10",
+        "Propose a PO: supplier 1, items [{product_id: 1, quantity: 50, unit_cost: 9.5}]",
+    ]
+
+def run_tests(agent: InventoryAgent2):
+    tests = [
+        "Show me a low_stock_report_tool",
+        "Run usage_and_forecast_tool for 30", 
+        'Use reorder_planner_tool with {"lead_time_days":7, "safety_days":3, "moq":10}',
+        'Use propose_po_tool with {"supplier_id": 1, "items": [{"product_id": 1, "quantity": 50, "unit_cost": 9.5}]}'
+    ]
+    for t in tests:
+        print("\n--- TEST ---")
+        print("Q:", t) 
+        res = agent.query(t)
+        print("OUT:", res["result"])
+
+if __name__ == "__main__":
+    agent = InventoryAgent2()
+    run_tests(agent)
+    print("\nTip:")
+    print("- After proposing a PO, run: commit_po_from_approval with 'preview approval_id=123'")
+    print("- Then: commit_po_from_approval_tool with 'confirm token=ABCDEFGH decided_by=Ahmed'")
